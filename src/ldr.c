@@ -95,9 +95,11 @@ out:
 	menu_clearscreen();
 
 	// Wait for keypress before returning
-	efi_print(L"Application exited with status: %p!\n"
-			  L"Press any key to continue!\n", status);
-	menu_wait_for_key(&key);
+	if (status != EFI_SUCCESS) {
+		efi_print(L"Application returned error: %p\n"
+			  		L"Press any key to continue\n", status);
+		menu_wait_for_key(&key);
+	}
 }
 
 efi_status_t efiapi efi_main(efi_handle_t image_handle, efi_system_table_t *system_table)

@@ -59,11 +59,8 @@ void menu_clearscreen()
     efi_st->con_out->clear_screen(efi_st->con_out);
 }
 
-void menu_draw_banner(efi_ch16_t *banner_text)
+static void menu_draw_banner(menu_screen *screen)
 {
-    // Clear the screen
-    menu_clearscreen();
-    // Draw banner
     efi_st->con_out->set_attr(efi_st->con_out, SELECTED_COLOR);
     for (efi_size_t i = 0; i < BANNER_HEIGHT; ++i) {
         efi_st->con_out->set_cursor_pos(efi_st->con_out, 0, i);
@@ -72,7 +69,11 @@ void menu_draw_banner(efi_ch16_t *banner_text)
         }
     }
     efi_st->con_out->set_cursor_pos(efi_st->con_out, 0, BANNER_HEIGHT / 2);
-    efi_st->con_out->output_string(efi_st->con_out, banner_text);
+    if (screen->timeout >= 0) {
+        efi_print(L"Booting '%s' in %ds...", screen->entries[screen->selected_entry].text, screen->timeout);
+    } else {
+        efi_st->con_out->output_string(efi_st->con_out, screen->title);
+    }
     efi_st->con_out->set_attr(efi_st->con_out, DEFAULT_COLOR);
 }
 
@@ -95,77 +96,94 @@ static void menu_draw_entries(menu_screen *screen)
 //
 #define SEC_TO_100NS(secs) (secs) * 10000000
 
+enum {
+    EVENT_TICK,
+    EVENT_UP,
+    EVENT_DOWN,
+    EVENT_SELECT,
+    EVENT_UNK
+};
+
 //
 // Wait for a timer or keypress
 //
-static void wait_for_timer_or_key(efi_event_t timer_event, efi_in_key_t *key)
+static int wait_for_event(void)
 {
-    efi_event_t events[2];
+    efi_event_t events[2] = { timer_event, efi_st->con_in->wait_for_key };
     efi_size_t index;
-    events[0] = timer_event;
-    events[1] = efi_st->con_in->wait_for_key;
+    efi_in_key_t key;
+
+    // Wait for event
     efi_bs->wait_for_event(ARRAY_SIZE(events), events, &index);
-    switch (index) {
-    case 0:
-        // Fake enter press on timeout
-        key->scan = 0;
-        key->c = L'\n';
-        break;
-    case 1:
-        // Read real key
-        efi_st->con_in->read_key(efi_st->con_in, key);
-        break;
+
+    // Timer
+    if (index == 0)
+        return EVENT_TICK;
+
+    // Key
+    efi_st->con_in->read_key(efi_st->con_in, &key);
+    switch (key.scan) {
+    case EFI_SCAN_UP:
+        return EVENT_UP;
+    case EFI_SCAN_DOWN:
+        return EVENT_DOWN;
+    case EFI_SCAN_NULL:
+        if (key.c == L'\r' || key.c == L'\n' || key.c == L' ')
+            return EVENT_SELECT;
     }
+
+    return EVENT_UNK;
 }
 
 menu_entry *menu_run(menu_screen *screen)
 {
     efi_status_t status;
+    menu_entry *submenu_entry;
 
-    // Set timer of needed
-    if (screen->timeout > 0) {
-        status = efi_bs->set_timer(timer_event, EFI_TIMER_RELATIVE,
-            SEC_TO_100NS(screen->timeout));
-        if (EFI_ERROR(status))
-            efi_abort(L"Failed to set timer!", EFI_ABORTED);
-    } else if (screen->timeout == 0) {
-        goto activate_entry;
-    }
+    if (screen->timeout == 0)
+        goto event_expire;
 
-    // Draw menu header and entries
-    menu_draw_banner(screen->title);
-    menu_draw_entries(screen);
-
-    // Wait for user input or timeout
     for (;;) {
-        efi_in_key_t key;
-        wait_for_timer_or_key(timer_event, &key);
+        // Draw menu
+        menu_clearscreen();
+        menu_draw_banner(screen);
+        menu_draw_entries(screen);
 
-        // First try to take action based on the scancode
-        switch (key.scan) {
-        case 0x01: // Up arrow
-            if (!screen->selected_entry)
-                continue;
-            --screen->selected_entry;
-            menu_draw_entries(screen);
-            break;
-        case 0x02: // Down arrow
-            if (screen->selected_entry == screen->entry_count - 1)
-                continue;
-            ++screen->selected_entry;
-            menu_draw_entries(screen);
-            break;
+        // Set timer
+        if (screen->timeout > 0) {
+            status = efi_bs->set_timer(timer_event, EFI_TIMER_RELATIVE, SEC_TO_100NS(1));
+            if (status != EFI_SUCCESS)
+                efi_abort(L"Failed to set timer!", EFI_ABORTED);
         }
 
-        // Than try the character code
-        if (key.c == L'\n' || key.c == L'\r' || key.c == L' ') {
-activate_entry:
-            // Disable the timeout if an option got selected
+        // Wait for event
+        int event = wait_for_event();
+
+        // Disable timeout on any keypress
+        if (event != EVENT_TICK) {
             screen->timeout = -1;
+        }
 
-            // Take action based on entry type
-            menu_entry *submenu_entry;
-
+        switch (event) {
+        case EVENT_TICK:
+            if (--screen->timeout == 0) {
+event_expire:
+                // Disable timeout
+                screen->timeout = -1;
+                // Select entry
+                goto event_select;
+            }
+            break;
+        case EVENT_UP:
+            if (screen->selected_entry > 0)
+                --screen->selected_entry;
+            break;
+        case EVENT_DOWN:
+            if (screen->selected_entry < screen->entry_count - 1)
+                ++screen->selected_entry;
+            break;
+        case EVENT_SELECT:
+event_select:
             switch (screen->entries[screen->selected_entry].type) {
             case menu_type_subscreen:
                 // Display screen for submenu entry
@@ -180,10 +198,6 @@ activate_entry:
                     // Return the entry if something was choose from the submenu
                     return submenu_entry;
                 }
-
-                // Re-draw current menu
-                menu_draw_banner(screen->title);
-                menu_draw_entries(screen);
                 break;
             case menu_type_info:
                 // Do nothing on info entries

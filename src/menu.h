@@ -44,9 +44,6 @@ void menu_add_entries(menu_screen **menu, menu_entry *entry, efi_size_t cnt);
 /* Wait for a keypress */
 void menu_wait_for_key(efi_in_key_t *key);
 
-/* Display a banner */
-void menu_draw_banner(efi_ch16_t *banner_text);
-
 //
 // Initialize the menu handling code
 //
