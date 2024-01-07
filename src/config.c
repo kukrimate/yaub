@@ -12,11 +12,11 @@
 //
 // Convert an ASCII string to an EFI string
 //
-static efi_ch16 *ascii_str_to_efi(char *ascii_str, efi_size len)
+static efi_ch16_t *ascii_str_to_efi(char *ascii_str, efi_size_t len)
 {
-    efi_ch16 *str = efi_alloc((len + 1) * sizeof(efi_ch16));
-    for (efi_size i = 0; i < len; ++i) {
-        str[i] = (efi_ch16) ascii_str[i];
+    efi_ch16_t *str = efi_alloc((len + 1) * sizeof(efi_ch16_t));
+    for (efi_size_t i = 0; i < len; ++i) {
+        str[i] = ascii_str[i];
     }
     str[len] = 0;
     return str;
@@ -25,13 +25,13 @@ static efi_ch16 *ascii_str_to_efi(char *ascii_str, efi_size len)
 //
 // Retrieve the size of a file
 //
-static efi_size get_file_size(efi_file_protocol *file)
+static efi_size_t get_file_size(efi_file_protocol_t *file)
 {
-    efi_status      status;
-    efi_file_info   *file_info;
-    efi_size        file_size;
+    efi_status_t    status;
+    efi_file_info_t *file_info;
+    efi_size_t      file_size;
 
-    status = get_file_info(file, &file_info);
+    status = efi_get_file_info(file, &file_info);
     if (EFI_ERROR(status))
         efi_abort(L"Error getting file info!\n", status);
 
@@ -43,7 +43,7 @@ static efi_size get_file_size(efi_file_protocol *file)
 //
 // Check if an ASCII string starts with a prefix
 //
-static efi_bool starts_with(char *str, char *prefix)
+static efi_bool_t starts_with(char *str, char *prefix)
 {
     while (*prefix)
         if (*prefix++ != *str++)
@@ -65,19 +65,19 @@ static char *get_next_line(char *str)
 //
 // Locate the file system corresponding to the boot volume
 //
-static efi_status locate_self_volume(efi_simple_file_system_protocol **self_volume)
+static efi_status_t locate_self_volume(efi_simple_file_system_protocol_t **self_volume)
 {
-    efi_status status;
-    efi_loaded_image_protocol *self_loaded_image;
+    efi_status_t status;
+    efi_loaded_image_protocol_t *loaded_image;
 
-    status = bs->handle_protocol(self_image_handle,
-        &(efi_guid) EFI_LOADED_IMAGE_PROTOCOL_GUID,
-        (void **) &self_loaded_image);
+    status = efi_bs->handle_protocol(efi_image_handle,
+        &(efi_guid_t) EFI_LOADED_IMAGE_PROTOCOL_GUID,
+        (void **) &loaded_image);
     if (EFI_ERROR(status))
         return status;
 
-    status = bs->handle_protocol(self_loaded_image->device_handle,
-        &(efi_guid) EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+    status = efi_bs->handle_protocol(loaded_image->device_handle,
+        &(efi_guid_t) EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
         (void **) self_volume);
     return status;
 }
@@ -85,28 +85,28 @@ static efi_status locate_self_volume(efi_simple_file_system_protocol **self_volu
 //
 // Read a file into a heap buffer from the boot volume, than NUL-terminate it
 //
-static char *read_text_file(efi_ch16 *path)
+static char *read_text_file(efi_ch16_t *path)
 {
-    efi_status status;
-    efi_simple_file_system_protocol *self_volume;
+    efi_status_t status;
+    efi_simple_file_system_protocol_t *self_volume;
 
     // Open root directory of self-volume
     status = locate_self_volume(&self_volume);
     if (EFI_ERROR(status))
         efi_abort(L"Failed to locate boot volume!\n", status);
-    efi_file_protocol *root_dir;
+    efi_file_protocol_t *root_dir;
     status = self_volume->open_volume(self_volume, &root_dir);
     if (EFI_ERROR(status))
         efi_abort(L"Failed to open boot volume root directory!\n", status);
 
     // Open file
-    efi_file_protocol *entries_file;
+    efi_file_protocol_t *entries_file;
     status = root_dir->open(root_dir, &entries_file, path, EFI_FILE_MODE_READ, 0);
     if (EFI_ERROR(status))
         efi_abort(L"Error opening entries file!\n", status);
 
     // Read file
-    efi_size entries_size = get_file_size(entries_file);
+    efi_size_t entries_size = get_file_size(entries_file);
     char *data = efi_alloc(entries_size + 1);
     status = entries_file->read(entries_file, &entries_size, data);
     if (EFI_ERROR(status))
@@ -129,10 +129,10 @@ static char *read_text_file(efi_ch16 *path)
 //
 // Parse the ASCII representation of a signed
 //
-static efi_ssize ascii_str_to_ssize(char *str, efi_size len)
+static efi_ssize_t ascii_str_to_ssize(char *str, efi_size_t len)
 {
-    efi_bool negative = false;
-    efi_ssize value = 0;
+    efi_bool_t negative = false;
+    efi_ssize_t value = 0;
 
     // Consume sign if present
     if (len > 0) {
@@ -176,13 +176,13 @@ void add_boot_entries(menu_screen **menu)
     char *file_data = read_text_file(ENTRIES_FILE_NAME);
 
     // Current entry
-    efi_bool have_entry = false;
+    efi_bool_t have_entry = false;
     menu_entry entry;
 
     for (char *current_line = file_data, *next_line;
-            next_line = get_next_line(current_line);
+            (next_line = get_next_line(current_line));
             current_line = next_line) {
-        efi_size current_line_length = next_line - current_line;
+        efi_size_t current_line_length = next_line - current_line;
 
         // Empty line or comment
         if (current_line[0] == ';' || current_line[0] == '\n')

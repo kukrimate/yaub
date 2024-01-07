@@ -31,20 +31,20 @@ menu_entry main_menu_fixed[] = {
 	}
 };
 
-static efi_device_path_protocol *get_self_volume_dp()
+static efi_device_path_protocol_t *get_self_volume_dp()
 {
-	efi_status status;
-	efi_loaded_image_protocol *self_loaded_image;
-	efi_device_path_protocol *dp;
+	efi_status_t status;
+	efi_loaded_image_protocol_t *self_loaded_image;
+	efi_device_path_protocol_t *dp;
 
-	status = bs->handle_protocol(self_image_handle,
-		&(efi_guid) EFI_LOADED_IMAGE_PROTOCOL_GUID,
+	status = efi_bs->handle_protocol(efi_image_handle,
+		&(efi_guid_t) EFI_LOADED_IMAGE_PROTOCOL_GUID,
 		(void **) &self_loaded_image);
 	if (EFI_ERROR(status))
 		goto err;
 
-	status = bs->handle_protocol(self_loaded_image->device_handle,
-		&(efi_guid) EFI_DEVICE_PATH_PROTOCOL_GUID,
+	status = efi_bs->handle_protocol(self_loaded_image->device_handle,
+		&(efi_guid_t) EFI_DEVICE_PATH_PROTOCOL_GUID,
 		(void **) &dp);
 	if (EFI_ERROR(status))
 		goto err;
@@ -54,29 +54,29 @@ err:
 	efi_abort(L"Error locating self volume device path!", status);
 }
 
-static void start_efi_image(efi_ch16 *path, efi_ch16 *flags)
+static void start_efi_image(efi_ch16_t *path, efi_ch16_t *flags)
 {
-	efi_status status;
-	efi_in_key key;
-	efi_handle child_image_handle;
-	efi_device_path_protocol *image_dp;
-	efi_loaded_image_protocol *loaded_image;
+	efi_status_t status;
+	efi_in_key_t key;
+	efi_handle_t child_image_handle;
+	efi_device_path_protocol_t *image_dp;
+	efi_loaded_image_protocol_t *loaded_image;
 
 	// De-init menu before running image
 	menu_clearscreen();
 	menu_fini();
 
 	// Load image
-	image_dp = append_filepath_device_path(get_self_volume_dp(), path);
-	status = bs->load_image(false, self_image_handle, image_dp, NULL, 0,
+	image_dp = efi_dp_append_file_path(get_self_volume_dp(), path);
+	status = efi_bs->load_image(false, efi_image_handle, image_dp, NULL, 0,
 		&child_image_handle);
 	if (EFI_ERROR(status))
 		goto out;
 
 	// Append load options
 	if (flags != NULL) {
-		status = bs->handle_protocol(child_image_handle,
-			&(efi_guid) EFI_LOADED_IMAGE_PROTOCOL_GUID,
+		status = efi_bs->handle_protocol(child_image_handle,
+			&(efi_guid_t) EFI_LOADED_IMAGE_PROTOCOL_GUID,
 			(void **) &loaded_image);
 		if (EFI_ERROR(status))
 			goto out;
@@ -85,7 +85,7 @@ static void start_efi_image(efi_ch16 *path, efi_ch16 *flags)
 	}
 
 	// Start image
-	status = bs->start_image(child_image_handle, NULL, NULL);
+	status = efi_bs->start_image(child_image_handle, NULL, NULL);
 
 out:
 	efi_free(image_dp);
@@ -100,10 +100,10 @@ out:
 	menu_wait_for_key(&key);
 }
 
-efi_status efiapi efi_main(efi_handle image_handle, efi_system_table *system_table)
+efi_status_t efiapi efi_main(efi_handle_t image_handle, efi_system_table_t *system_table)
 {
 	menu_screen *main_menu;
-	efi_size entry_idx;
+	efi_size_t entry_idx;
 	menu_entry *selected;
 
 	efi_init(image_handle, system_table);

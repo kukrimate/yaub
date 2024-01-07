@@ -10,12 +10,12 @@
 #define BANNER_HEIGHT 3
 
 // Menu globals
-static efi_size cols, rows;
-static efi_event timer_event;
+static efi_size_t cols, rows;
+static efi_event_t timer_event;
 
-void menu_add_entries(menu_screen **menu, menu_entry *entry, efi_size cnt)
+void menu_add_entries(menu_screen **menu, menu_entry *entry, efi_size_t cnt)
 {
-    efi_size oldsize;
+    efi_size_t oldsize;
 
     oldsize = sizeof(menu_screen) +
         sizeof(menu_entry) * (*menu)->entry_count;
@@ -25,22 +25,22 @@ void menu_add_entries(menu_screen **menu, menu_entry *entry, efi_size cnt)
     (*menu)->entry_count += cnt;
 }
 
-void menu_wait_for_key(efi_in_key *key)
+void menu_wait_for_key(efi_in_key_t *key)
 {
-    efi_size index;
+    efi_size_t index;
 
-    bs->wait_for_event(1, &st->con_in->wait_for_key, &index);
-    st->con_in->read_key(st->con_in, key);
+    efi_bs->wait_for_event(1, &efi_st->con_in->wait_for_key, &index);
+    efi_st->con_in->read_key(efi_st->con_in, key);
 }
 
 void menu_init()
 {
-    efi_status status;
+    efi_status_t status;
 
-    status = st->con_out->query_mode(st->con_out,
-        st->con_out->mode->mode, &cols, &rows);
-    status = st->con_out->enable_cursor(st->con_out, false);
-    status = bs->create_event(EVT_TIMER,
+    status = efi_st->con_out->query_mode(efi_st->con_out,
+       efi_st->con_out->mode->mode, &cols, &rows);
+    status = efi_st->con_out->enable_cursor(efi_st->con_out, false);
+    status = efi_bs->create_event(EVT_TIMER,
         TPL_CALLBACK, NULL, NULL, &timer_event);
     if (EFI_ERROR(status))
         efi_abort(L"Failed to create timer event!", EFI_ABORTED);
@@ -48,45 +48,45 @@ void menu_init()
 
 void menu_fini()
 {
-    efi_status status = bs->close_event(timer_event);
+    efi_status_t status = efi_bs->close_event(timer_event);
     if (EFI_ERROR(status))
         efi_abort(L"Failed to close timer event!", EFI_ABORTED);
 }
 
 void menu_clearscreen()
 {
-    st->con_out->set_attr(st->con_out, DEFAULT_COLOR);
-    st->con_out->clear_screen(st->con_out);
+    efi_st->con_out->set_attr(efi_st->con_out, DEFAULT_COLOR);
+    efi_st->con_out->clear_screen(efi_st->con_out);
 }
 
-void menu_draw_banner(efi_ch16 *banner_text)
+void menu_draw_banner(efi_ch16_t *banner_text)
 {
     // Clear the screen
     menu_clearscreen();
     // Draw banner
-    st->con_out->set_attr(st->con_out, SELECTED_COLOR);
-    for (efi_size i = 0; i < BANNER_HEIGHT; ++i) {
-        st->con_out->set_cursor_pos(st->con_out, 0, i);
-        for (efi_size j = 0; j < cols; ++j) {
-            st->con_out->output_string(st->con_out, L" ");
+    efi_st->con_out->set_attr(efi_st->con_out, SELECTED_COLOR);
+    for (efi_size_t i = 0; i < BANNER_HEIGHT; ++i) {
+        efi_st->con_out->set_cursor_pos(efi_st->con_out, 0, i);
+        for (efi_size_t j = 0; j < cols; ++j) {
+            efi_st->con_out->output_string(efi_st->con_out, L" ");
         }
     }
-    st->con_out->set_cursor_pos(st->con_out, 0, BANNER_HEIGHT / 2);
-    st->con_out->output_string(st->con_out, banner_text);
-    st->con_out->set_attr(st->con_out, DEFAULT_COLOR);
+    efi_st->con_out->set_cursor_pos(efi_st->con_out, 0, BANNER_HEIGHT / 2);
+    efi_st->con_out->output_string(efi_st->con_out, banner_text);
+    efi_st->con_out->set_attr(efi_st->con_out, DEFAULT_COLOR);
 }
 
 static void menu_draw_entries(menu_screen *screen)
 {
-    for (efi_size i = 0; i < screen->entry_count; ++i) {
+    for (efi_size_t i = 0; i < screen->entry_count; ++i) {
         if (i == screen->selected_entry) {
-            st->con_out->set_attr(st->con_out, SELECTED_COLOR);
+            efi_st->con_out->set_attr(efi_st->con_out, SELECTED_COLOR);
         } else {
-            st->con_out->set_attr(st->con_out, DEFAULT_COLOR);
+            efi_st->con_out->set_attr(efi_st->con_out, DEFAULT_COLOR);
         }
 
-        st->con_out->set_cursor_pos(st->con_out, 0, i + 3);
-        st->con_out->output_string(st->con_out, screen->entries[i].text);
+        efi_st->con_out->set_cursor_pos(efi_st->con_out, 0, i + 3);
+        efi_st->con_out->output_string(efi_st->con_out, screen->entries[i].text);
     }
 }
 
@@ -98,13 +98,13 @@ static void menu_draw_entries(menu_screen *screen)
 //
 // Wait for a timer or keypress
 //
-static void wait_for_timer_or_key(efi_event timer_event, efi_in_key *key)
+static void wait_for_timer_or_key(efi_event_t timer_event, efi_in_key_t *key)
 {
-    efi_event events[2];
-    efi_size index;
+    efi_event_t events[2];
+    efi_size_t index;
     events[0] = timer_event;
-    events[1] = st->con_in->wait_for_key;
-    bs->wait_for_event(ARRAY_SIZE(events), events, &index);
+    events[1] = efi_st->con_in->wait_for_key;
+    efi_bs->wait_for_event(ARRAY_SIZE(events), events, &index);
     switch (index) {
     case 0:
         // Fake enter press on timeout
@@ -113,18 +113,18 @@ static void wait_for_timer_or_key(efi_event timer_event, efi_in_key *key)
         break;
     case 1:
         // Read real key
-        st->con_in->read_key(st->con_in, key);
+        efi_st->con_in->read_key(efi_st->con_in, key);
         break;
     }
 }
 
 menu_entry *menu_run(menu_screen *screen)
 {
-    efi_status status;
+    efi_status_t status;
 
     // Set timer of needed
     if (screen->timeout > 0) {
-        status = bs->set_timer(timer_event, timer_relative,
+        status = efi_bs->set_timer(timer_event, EFI_TIMER_RELATIVE,
             SEC_TO_100NS(screen->timeout));
         if (EFI_ERROR(status))
             efi_abort(L"Failed to set timer!", EFI_ABORTED);
@@ -138,7 +138,7 @@ menu_entry *menu_run(menu_screen *screen)
 
     // Wait for user input or timeout
     for (;;) {
-        efi_in_key key;
+        efi_in_key_t key;
         wait_for_timer_or_key(timer_event, &key);
 
         // First try to take action based on the scancode

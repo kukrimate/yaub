@@ -1,5 +1,5 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#pragma once
+#include "menu.h"
 
 //
 // Path to the confiugration file
@@ -10,5 +10,3 @@
 // Add the entries from the configuration file to a menu screen
 //
 void add_boot_entries(menu_screen **menu);
-
-#endif
